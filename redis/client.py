@@ -1,3 +1,4 @@
+# coding=utf-8
 from __future__ import with_statement
 from itertools import chain
 import datetime
@@ -295,7 +296,7 @@ class StrictRedis(object):
         string_keys_to_dict(
             'BITCOUNT BITPOS DECRBY DEL GETBIT HDEL HLEN INCRBY LINSERT LLEN '
             'LPUSHX PFADD PFCOUNT RPUSHX SADD SCARD SDIFFSTORE SETBIT '
-            'SETRANGE SINTERSTORE SREM STRLEN SUNIONSTORE ZADD ZCARD '
+            'SETRANGE SINTERSTORE SREM STRLEN SUNIONSTORE ZADD ZCARD GEOADD'
             'ZLEXCOUNT ZREM ZREMRANGEBYLEX ZREMRANGEBYRANK ZREMRANGEBYSCORE',
             int
         ),
@@ -305,7 +306,7 @@ class StrictRedis(object):
             'LPUSH RPUSH',
             lambda r: isinstance(r, long) and r or nativestr(r) == 'OK'
         ),
-        string_keys_to_dict('SORT', sort_return_tuples),
+        string_keys_to_dict('SORT GEOSEARCH', sort_return_tuples),
         string_keys_to_dict('ZSCORE ZINCRBY', float_or_none),
         string_keys_to_dict(
             'FLUSHALL FLUSHDB LSET LTRIM MSET PFMERGE RENAME '
@@ -657,6 +658,66 @@ class StrictRedis(object):
             return self.execute_command('INFO')
         else:
             return self.execute_command('INFO', section)
+
+    def geoadd(self, geoset, *args):
+        """
+        添加坐标 name [[[lon, lat], value]...]
+        """
+        pieces = []
+        if args:
+            if len(args) % 2 != 0:
+                raise RedisError("GEOADD requires an equal number of "
+                                 "loc and member")
+            for x, y in izip(*[iter(args)] * 2):
+                pieces.extend([x[0], x[1], y])
+        return self.execute_command('GEOADD', geoset, "wgs84", *pieces)
+
+    def geosearch(self, name, loc, radius, sort="asc", withdistances=None, withcoordinates=None, offset=0, count=10,
+                  include=None, exclude=None):
+        """
+        *  GEOSEARCH key MERCATOR|WGS84 x y  <GeoOptions>
+         *  GEOSEARCH key MEMBER m            <GeoOptions>
+         *
+         *  <GeoOptions> = [IN N m0 m1 ..] [RADIUS r]
+         *                 [ASC|DESC] [WITHCOORDINATES] [WITHDISTANCES]
+         *                 [GET pattern [GET pattern ...]]
+         *                 [INCLUDE key_pattern value_pattern [INCLUDE key_pattern value_pattern ...]]
+         *                 [EXCLUDE key_pattern value_pattern [EXCLUDE key_pattern value_pattern ...]]
+         *                 [LIMIT offset count]
+         *
+         *  For 'GET pattern' in GEOSEARCH:
+         *  If 'pattern' is '#.<attr>',  return actual point's attribute stored by 'GeoAdd'
+         *  Other pattern would processed the same as 'sort' command (Use same C++ function),
+         *  The patterns like '#', "*->field" are valid.
+        """
+        pieces = ['GEOSEARCH', name, "wgs84", loc[0], loc[1], "RADIUS", radius, sort]
+
+        options = {'groups': 0}
+
+        if withdistances:
+            pieces.append(Token('withdistances'))
+            options = {'groups': 2}
+
+        if withcoordinates:
+            pieces.append(Token('withcoordinates'))
+            if withdistances:
+                options = {'groups': 4}
+            else:
+                options = {'groups': 3}
+
+        if offset > -1 and count:
+            pieces.extend(["limit", offset, count])
+
+        if include and isinstance(include, list):
+            if len(include) % 2 == 0:
+                for x, y in izip(*[iter(include)] * 2):
+                    pieces.extend(["INCLUDE", x, y])
+
+        if exclude and isinstance(exclude, list):
+            if len(exclude) % 2 == 0:
+                for x, y in izip(*[iter(exclude)] * 2):
+                    pieces.extend(["EXCLUDE", x, y])
+        return self.execute_command(*pieces, **options)
 
     def lastsave(self):
         """
