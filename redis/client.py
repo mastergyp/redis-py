@@ -709,14 +709,10 @@ class StrictRedis(object):
             pieces.extend(["limit", offset, count])
 
         if include and isinstance(include, list):
-            if len(include) % 2 == 0:
-                for x, y in izip(*[iter(include)] * 2):
-                    pieces.extend(["INCLUDE", x, y])
+            pieces.extend(["INCLUDE", include[0], include[1]])
 
         if exclude and isinstance(exclude, list):
-            if len(exclude) % 2 == 0:
-                for x, y in izip(*[iter(exclude)] * 2):
-                    pieces.extend(["EXCLUDE", x, y])
+            pieces.extend(["EXCLUDE", include[0], include[1]])
         return self.execute_command(*pieces, **options)
 
     def lastsave(self):
