@@ -672,8 +672,21 @@ class StrictRedis(object):
                 pieces.extend([x[0], x[1], y])
         return self.execute_command('GEOADD', geoset, "wgs84", *pieces)
 
+    def newgeoadd(self, geoset, tp="wgs84", *args):
+        """
+        添加坐标 name [[[lon, lat], value]...]
+        """
+        pieces = []
+        if args:
+            if len(args) % 2 != 0:
+                raise RedisError("GEOADD requires an equal number of "
+                                 "loc and member")
+            for x, y in izip(*[iter(args)] * 2):
+                pieces.extend([x[0], x[1], y])
+        return self.execute_command('GEOADD', geoset, tp, *pieces)
+
     def geosearch(self, name, loc, radius, sort="asc", withdistances=None, withcoordinates=None, offset=0, count=10,
-                  include=None, exclude=None):
+                  include=None, exclude=None, tp="wgs84"):
         """
         *  GEOSEARCH key MERCATOR|WGS84 x y  <GeoOptions>
          *  GEOSEARCH key MEMBER m            <GeoOptions>
@@ -690,7 +703,7 @@ class StrictRedis(object):
          *  Other pattern would processed the same as 'sort' command (Use same C++ function),
          *  The patterns like '#', "*->field" are valid.
         """
-        pieces = ['GEOSEARCH', name, "wgs84", loc[0], loc[1], "RADIUS", radius, sort]
+        pieces = ['GEOSEARCH', name, tp, loc[0], loc[1], "RADIUS", radius, sort]
 
         options = {'groups': 0}
 
